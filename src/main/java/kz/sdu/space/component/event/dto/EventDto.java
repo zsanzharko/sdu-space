@@ -4,7 +4,7 @@ import kz.sdu.space.component.DataTransfer;
 import lombok.Builder;
 import lombok.Data;
 
-import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,5 +15,5 @@ public class EventDto implements DataTransfer {
   private List<UUID> imageIdList;
   private String title;
   private String description;
-  private Date dateEvent;
+  private Timestamp dateEvent;
 }

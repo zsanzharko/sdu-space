@@ -1,15 +1,17 @@
 package kz.sdu.space.component.event;
 
 import kz.sdu.space.component.event.dto.EventDto;
+import kz.sdu.space.component.event.dto.EventForm;
 import kz.sdu.space.exception.IdNotFoundException;
 import kz.sdu.space.exception.InvalidInputException;
-import kz.sdu.space.minio.MinioImageStorageServiceImpl;
-import kz.sdu.space.service.ImageStorageService;
+import kz.sdu.space.component.minio.MinioImageStorageServiceImpl;
+import kz.sdu.space.component.service.ImageStorageService;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.sql.Date;
+import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -30,18 +32,16 @@ public class EventComponentImpl implements EventComponent {
   }
 
   @Override
-  public EventDto create(@NonNull EventDto eventDto) throws InvalidInputException {
-    if (eventDto.getId() == null) {
-      throw new InvalidInputException("Found id in event.");
-    }
-    validEventTitle(eventDto.getTitle());
-    validDateTime(eventDto.getDateEvent());
+  public EventDto create(@NonNull EventForm eventForm) {
+    validEventTitle(eventForm.getTitle());
+    validDateTime(eventForm.getDateEvent());
 
+    EventDto eventDto = eventForm.getDataTransfer();
     return convertEntity(eventRepository.save(convertDto(eventDto)));
   }
 
   @Override
-  public EventDto read(@NonNull Long id) throws IdNotFoundException {
+  public EventDto read(@NonNull Long id) {
     Optional<Event> event = eventRepository.findById(id);
     if (event.isPresent()) {
       return convertEntity(event.get());
@@ -50,11 +50,17 @@ public class EventComponentImpl implements EventComponent {
   }
 
   @Override
+  public List<EventDto> readAll() {
+    return eventRepository.findAll().stream()
+            .map(this::convertEntity)
+            .toList();
+  }
+
+  @Override
   public void update(@NonNull EventDto eventDto) throws InvalidInputException {
     validId(eventDto);
     Event event = convertDto(eventDto);
 
-    validEventTitle(eventDto.getTitle());
     validDateTime(eventDto.getDateEvent());
     eventRepository.save(event);
   }
@@ -162,7 +168,7 @@ public class EventComponentImpl implements EventComponent {
             .build();
   }
 
-  private void validDateTime(Date dateEvent) throws InvalidInputException {
+  private void validDateTime(Timestamp dateEvent) throws InvalidInputException {
     if (dateEvent == null || dateEvent.before(Date.valueOf(LocalDate.now()))) {
       throw new InvalidInputException("Incorrect date. Please enter correct date");
     }
@@ -170,7 +176,9 @@ public class EventComponentImpl implements EventComponent {
 
   private void validEventTitle(String title) throws InvalidInputException {
     if (title == null || title.isEmpty() || title.length() >= ruleConfiguration.getMaxTitleLength()) {
-      throw new InvalidInputException("Title is empty. Please enter the number");
+      throw new InvalidInputException("Title is empty. Please enter the title");
+    } else if (eventRepository.existsByTitle(title)) {
+      throw new InvalidInputException("Title is exist . Please enter other title");
     }
   }
 }

@@ -1,4 +1,4 @@
-package kz.sdu.space.minio;
+package kz.sdu.space.component.minio;
 
 import io.minio.MinioClient;
 import lombok.extern.slf4j.Slf4j;

@@ -1,11 +1,11 @@
 package kz.sdu.space.component;
 
-import kz.sdu.space.exception.IdNotFoundException;
-import kz.sdu.space.exception.InvalidInputException;
+import java.util.List;
 
-public interface CrudServiceOperations<D extends DataTransfer> {
-  D create(D d) throws InvalidInputException;
-  D read(Long id) throws IdNotFoundException;
-  void update(D d) throws InvalidInputException;
+public interface CrudServiceOperations<D extends DataTransfer, F extends RequestForm<?>> {
+  D create(F f);
+  D read(Long id);
+  List<D> readAll();
+  void update(D d);
   void delete(Long id);
 }

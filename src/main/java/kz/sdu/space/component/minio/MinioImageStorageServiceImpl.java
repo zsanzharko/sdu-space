@@ -1,4 +1,4 @@
-package kz.sdu.space.minio;
+package kz.sdu.space.component.minio;
 
 import io.minio.BucketExistsArgs;
 import io.minio.GetObjectArgs;
@@ -8,7 +8,7 @@ import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import io.minio.errors.MinioException;
 import jakarta.annotation.PostConstruct;
-import kz.sdu.space.service.ImageStorageService;
+import kz.sdu.space.component.service.ImageStorageService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;

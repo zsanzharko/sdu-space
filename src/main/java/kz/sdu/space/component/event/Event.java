@@ -14,7 +14,7 @@ import jakarta.persistence.TemporalType;
 import lombok.Builder;
 import lombok.Data;
 
-import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -27,7 +27,7 @@ public class Event {
   }
 
   @Builder
-  public Event(Long id, List<UUID> imageIdList, String title, String description, Date dateEvent) {
+  public Event(Long id, List<UUID> imageIdList, String title, String description, Timestamp dateEvent) {
     this.id = id;
     this.imageIdList = imageIdList;
     this.title = title;
@@ -50,8 +50,8 @@ public class Event {
   private String description;
 
   @Column(name = "event_date")
-  @Temporal(TemporalType.DATE)
-  private Date dateEvent;
+  @Temporal(TemporalType.TIMESTAMP)
+  private Timestamp dateEvent;
 
   public void addImageId(UUID imageId) {
     if (imageIdList == null) {
