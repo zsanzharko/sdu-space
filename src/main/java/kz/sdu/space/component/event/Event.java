@@ -15,16 +15,26 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.sql.Date;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 @Entity
 @Table(name = "event", schema = "event_schema")
 @Data
-@Builder
 public class Event {
   public Event() {
   }
+
+  @Builder
+  public Event(Long id, List<UUID> imageIdList, String title, String description, Date dateEvent) {
+    this.id = id;
+    this.imageIdList = imageIdList;
+    this.title = title;
+    this.description = description;
+    this.dateEvent = dateEvent;
+  }
+
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   @Column(name = "id")
@@ -42,4 +52,18 @@ public class Event {
   @Column(name = "event_date")
   @Temporal(TemporalType.DATE)
   private Date dateEvent;
+
+  public void addImageId(UUID imageId) {
+    if (imageIdList == null) {
+      imageIdList = new ArrayList<>();
+    }
+    imageIdList.add(imageId);
+  }
+
+  public void removeImageId(UUID imageId) {
+    if (imageIdList == null) {
+      return;
+    }
+    imageIdList.remove(imageId);
+  }
 }

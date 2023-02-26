@@ -1,4 +1,4 @@
-package kz.sdu.space.component.event;
+package kz.sdu.space.component.event.dto;
 
 import kz.sdu.space.component.DataTransfer;
 import lombok.Builder;
