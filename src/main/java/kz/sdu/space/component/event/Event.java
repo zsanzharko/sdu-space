@@ -17,7 +17,6 @@ import lombok.Data;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 @Entity
 @Table(name = "event", schema = "event_schema")
@@ -27,7 +26,7 @@ public class Event {
   }
 
   @Builder
-  public Event(Long id, List<UUID> imageIdList, String title, String description, Timestamp dateEvent) {
+  public Event(Long id, List<String> imageIdList, String title, String description, Timestamp dateEvent) {
     this.id = id;
     this.imageIdList = imageIdList;
     this.title = title;
@@ -43,7 +42,7 @@ public class Event {
   @ElementCollection
   @CollectionTable(name = "event_images_id", schema = "event_schema",
           joinColumns = @JoinColumn(name = "id"))
-  private List<UUID> imageIdList;
+  private List<String> imageIdList;
   @Column(name = "title")
   private String title;
   @Column(name = "description")
@@ -53,14 +52,14 @@ public class Event {
   @Temporal(TemporalType.TIMESTAMP)
   private Timestamp dateEvent;
 
-  public void addImageId(UUID imageId) {
+  public void addImageId(String imageId) {
     if (imageIdList == null) {
       imageIdList = new ArrayList<>();
     }
     imageIdList.add(imageId);
   }
 
-  public void removeImageId(UUID imageId) {
+  public void removeImageId(String imageId) {
     if (imageIdList == null) {
       return;
     }

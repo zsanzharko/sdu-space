@@ -6,12 +6,22 @@ import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
+import io.minio.StatObjectArgs;
+import io.minio.errors.ErrorResponseException;
+import io.minio.errors.InsufficientDataException;
+import io.minio.errors.InternalException;
+import io.minio.errors.InvalidResponseException;
 import io.minio.errors.MinioException;
+import io.minio.errors.ServerException;
+import io.minio.errors.XmlParserException;
 import jakarta.annotation.PostConstruct;
 import kz.sdu.space.component.service.ImageStorageService;
+import kz.sdu.space.exception.IdNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -22,6 +32,7 @@ import java.security.NoSuchAlgorithmException;
 @Service
 @Slf4j
 public class MinioImageStorageServiceImpl implements ImageStorageService {
+  private static final String BASE_IMAGE_PATH = "images";
   private final MinioClient minio;
   private final String bucket;
   private final long maxObjectSize;
@@ -61,6 +72,11 @@ public class MinioImageStorageServiceImpl implements ImageStorageService {
   }
 
   @Override
+  public void updateImage(MultipartFile multipartFile, String path) {
+
+  }
+
+  @Override
   public byte[] getImage(String objectName) {
     try {
       GetObjectArgs args = GetObjectArgs.builder()
@@ -71,28 +87,66 @@ public class MinioImageStorageServiceImpl implements ImageStorageService {
       ByteArrayOutputStream output = new ByteArrayOutputStream();
       insertBytesToStream(stream, output);
       return output.toByteArray();
-    } catch (IOException | MinioException |
-             InvalidKeyException | NoSuchAlgorithmException e) {
+    } catch (IOException | InvalidKeyException | NoSuchAlgorithmException | InsufficientDataException |
+             InternalException | InvalidResponseException | ServerException | XmlParserException e) {
       throw new RuntimeException(e);
+    } catch (ErrorResponseException e) {
+      try (var response = e.response()) {
+        if (response.code() == HttpStatus.NOT_FOUND.value()) {
+          throw new IdNotFoundException("Image not found");
+        }
+      }
+    }
+    throw new RuntimeException("Have problem with getting image");
+  }
+
+  @Override
+  public void deleteAll(String componentPath, Long id) {
+    final String path = String.format("%s/%d/%s", componentPath, id, BASE_IMAGE_PATH);
+    if (isObjectExist(path)) {
+      try {
+        minio.removeObject(RemoveObjectArgs.builder()
+                .bucket(bucket)
+                .object(path)
+                .build());
+      } catch (MinioException | IOException | NoSuchAlgorithmException | InvalidKeyException e) {
+        throw new RuntimeException(e);
+      }
     }
   }
 
   @Override
-  public void deleteAll() {
+  public void deleteImage(String componentPath, Long id, String objectName) {
+    final String path = String.format("%s/%d/%s/%s", componentPath, id, BASE_IMAGE_PATH, objectName);
+    if (isObjectExist(path)) {
+      try {
+        minio.removeObject(RemoveObjectArgs.builder()
+                .bucket(bucket)
+                .object(path)
+                .build());
+      } catch (MinioException | IOException | NoSuchAlgorithmException | InvalidKeyException e) {
+        throw new RuntimeException(e);
+      }
+    }
   }
 
   @Override
-  public boolean deleteImage(String objectName) {
+  public String getBasePath() {
+    return BASE_IMAGE_PATH;
+  }
+
+  private boolean isObjectExist(final String path) {
     try {
-      minio.removeObject(RemoveObjectArgs.builder()
+      minio.statObject(StatObjectArgs.builder()
               .bucket(bucket)
-              .object(objectName)
-              .build());
+              .object(path).build());
       return true;
-    } catch (MinioException | InvalidKeyException | IOException | NoSuchAlgorithmException e) {
-      System.out.println("Error occurred: " + e);
+    } catch (ErrorResponseException e) {
+      e.printStackTrace();
+      return false;
+    } catch (Exception e) {
+      throw new RuntimeException(e.getMessage());
     }
-    return false;
   }
 
   private static void insertBytesToStream(InputStream stream, ByteArrayOutputStream output) throws IOException {

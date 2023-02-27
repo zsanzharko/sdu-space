@@ -2,24 +2,25 @@ package kz.sdu.space.component.event;
 
 import kz.sdu.space.component.event.dto.EventDto;
 import kz.sdu.space.component.event.dto.EventForm;
-import kz.sdu.space.exception.IdNotFoundException;
-import kz.sdu.space.exception.InvalidInputException;
 import kz.sdu.space.component.minio.MinioImageStorageServiceImpl;
 import kz.sdu.space.component.service.ImageStorageService;
+import kz.sdu.space.exception.IdNotFoundException;
+import kz.sdu.space.exception.InvalidInputException;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDate;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 @Component
 public class EventComponentImpl implements EventComponent {
+  private static final String BASE_EVENT_PATH = "events";
   private final EventRepository eventRepository;
   private final EventRuleConfiguration ruleConfiguration;
   private final ImageStorageService storageService;
@@ -66,40 +67,42 @@ public class EventComponentImpl implements EventComponent {
   }
 
   @Override
-  public void updateImages(Long eventId, List<EventImageTransfer> imagesTransfer) throws InvalidInputException, IOException {
-    if (imagesTransfer.size() > ruleConfiguration.getMaxSizeImage()) {
-      throw new InvalidInputException(String.format("Photos more than %d",
-              ruleConfiguration.getMaxSizeImage()));
-    }
+  public void updateImages(Long eventId, List<MultipartFile> multipartFileList) throws InvalidInputException, IOException {
+    validImageSize(multipartFileList.size());
     Event event = eventRepository.findById(eventId)
             .orElseThrow(() -> new InvalidInputException("Id don't found"));
 
-    for (EventImageTransfer imageTransfer : imagesTransfer) {
-      String imageName = getImageName(imageTransfer.getName());
+    for (MultipartFile file : multipartFileList) {
+      final String fileName = generateFileName(file.getOriginalFilename());
+      String imageName = generateAbsolutePath(eventId, fileName);
       String path = String.format("events/%d/images/%s", eventId, imageName);
-      if (getImage(path) == null) {
+      if (getImage(eventId, path) == null) {
         storageService.uploadImage(
-                imageTransfer.getMultipartFile().getInputStream(),
+                file.getInputStream(),
                 path,
-                imageTransfer.getContentType()
+                file.getContentType()
         );
-        event.addImageId(UUID.fromString(imageName));
+        event.addImageId(fileName);
+        eventRepository.save(event);
       }
     }
-    List<UUID> comingImageIds = imagesTransfer.stream()
-            .map(i -> UUID.fromString(i.getName())).toList();
-
+    List<String> comingImageIds = multipartFileList.stream()
+            .map(MultipartFile::getName)
+            .toList();
     // process removing don't use images
-    for (UUID imageId : event.getImageIdList()) {
-      if (!comingImageIds.contains(imageId)) {
-        storageService.deleteImage(imageId.toString());
+    for (String imageId : event.getImageIdList()) {
+      if (comingImageIds.contains(imageId)) {
+        storageService.deleteImage(BASE_EVENT_PATH, eventId, imageId);
       }
     }
   }
 
-  private String getImageName(String name) {
-    UUID uuid = UUID.randomUUID();
-    return String.format("%s-%s", uuid, name);
+  private void validImageSize(Integer size) {
+    if (size >= ruleConfiguration.getMaxSizeImage()) {
+      //TODO need another exception http status code
+      throw new InvalidInputException(String.format("Photos more than %d",
+              ruleConfiguration.getMaxSizeImage()));
+    }
   }
 
   private void validId(EventDto eventDto) throws InvalidInputException {
@@ -114,36 +117,56 @@ public class EventComponentImpl implements EventComponent {
   }
 
   @Override
-  public void uploadImage(EventImageTransfer dto, Event entity) throws IOException {
-    List<UUID> entityImageIds = entity.getImageIdList();
-    byte[] image;
-    boolean found = false;
-    for (UUID imageId : entityImageIds) {
-      //FIXME can't check contentType
-      image = storageService.getImage(imageId.toString());
-      if (Arrays.equals(dto.getMultipartFile().getBytes(), image)) {
-        found = true;
-        break;
+  public void uploadImage(MultipartFile file, Long eventId) {
+    Optional<Event> optionalEvent = eventRepository.findById(eventId);
+    if (optionalEvent.isEmpty()) {
+      throw new IdNotFoundException();
+    }
+    optionalEvent.ifPresent(event -> {
+      validImageSize(event.getImageIdList().size());
+      try {
+        final String fileName = generateFileName(file.getOriginalFilename());
+        final String path = generateAbsolutePath(eventId, fileName);
+        storageService.uploadImage(file.getInputStream(), path, file.getContentType());
+        event.addImageId(fileName);
+        eventRepository.save(event);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
       }
-    }
-    if (!found) {
-      storageService.uploadImage(dto.getMultipartFile().getInputStream(),
-              dto.getName(), dto.getContentType());
-    }
+    });
   }
 
   @Override
-  public byte[] getImage(String objectName) throws InvalidInputException {
-    if (!validateImageName(objectName)) {
-      throw new InvalidInputException("Uncorrected input file name");
-    }
-
-    return storageService.getImage(objectName);
+  public byte[] getImage(Long eventId, String originalFilename) throws InvalidInputException {
+    final String path = generateAbsolutePath(eventId, originalFilename);
+    return storageService.getImage(path);
   }
 
-  private boolean validateImageName(String name) {
-    String regex = "^events/\\d+/images/\\w+\\.\\w+$";
-    return name.matches(regex);
+  private String generateFileName(String originalFilename) {
+    //TODO realize format 'filename.png' from content-type
+    if (originalFilename == null) {
+      throw new InvalidInputException("File must have name with format.");
+    }
+    return UUID.randomUUID() + originalFilename.trim().substring(originalFilename.indexOf('.'));
+  }
+
+  private String generateAbsolutePath(final Long id, String fileName) {
+    String absoluteFilePath = String.format("%s/%s/%s/%s",
+            BASE_EVENT_PATH, id,
+            storageService.getBasePath(),
+            fileName
+    );
+    if (invalidateImageName(absoluteFilePath)) {
+      throw new RuntimeException("Error with generating name for image");
+    }
+    return absoluteFilePath;
+  }
+
+  private boolean invalidateImageName(String absolutePath) {
+    //TODO match end dot with format
+    String regex = String.format("^%s/\\d+/%s/.*$",
+            BASE_EVENT_PATH, storageService.getBasePath());
+    return !absolutePath.matches(regex);
   }
 
   @Override

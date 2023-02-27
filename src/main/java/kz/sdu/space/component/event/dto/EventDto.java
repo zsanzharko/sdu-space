@@ -6,13 +6,12 @@ import lombok.Data;
 
 import java.sql.Timestamp;
 import java.util.List;
-import java.util.UUID;
 
 @Data
 @Builder
 public class EventDto implements DataTransfer {
   private Long id;
-  private List<UUID> imageIdList;
+  private List<String> imageIdList;
   private String title;
   private String description;
   private Timestamp dateEvent;
