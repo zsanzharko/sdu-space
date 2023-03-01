@@ -13,7 +13,7 @@ public interface ImageStorageService {
 
   void deleteAll(String path, Long id);
 
-  void deleteImage(String componentPath, Long id, String objectName);
+  void deleteImage(String absolutePath);
 
   String getBasePath();
 }

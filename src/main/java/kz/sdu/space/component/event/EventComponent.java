@@ -18,4 +18,6 @@ public interface EventComponent extends CrudServiceOperations<EventDto, EventFor
   void uploadImage(MultipartFile file, Long eventId);
 
   byte[] getImage(Long eventId, String originalFilename) throws InvalidInputException;
+
+  void deleteImage(Long eventId, String fileName);
 }

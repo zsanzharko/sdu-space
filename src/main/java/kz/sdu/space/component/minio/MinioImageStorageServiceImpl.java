@@ -17,6 +17,7 @@ import io.minio.errors.XmlParserException;
 import jakarta.annotation.PostConstruct;
 import kz.sdu.space.component.service.ImageStorageService;
 import kz.sdu.space.exception.IdNotFoundException;
+import kz.sdu.space.exception.InvalidInputException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -66,8 +67,10 @@ public class MinioImageStorageServiceImpl implements ImageStorageService {
               .stream(inputStream, -1, maxObjectSize)
               .build();
       minio.putObject(args);
-    } catch (Exception e) {
+    } catch (MinioException | NoSuchAlgorithmException | InvalidKeyException e) {
       throw new RuntimeException("Failed to upload file to MinIO", e);
+    } catch (IOException e) {
+      throw new InvalidInputException(e.getMessage());
     }
   }
 
@@ -109,20 +112,21 @@ public class MinioImageStorageServiceImpl implements ImageStorageService {
                 .bucket(bucket)
                 .object(path)
                 .build());
-      } catch (MinioException | IOException | NoSuchAlgorithmException | InvalidKeyException e) {
-        throw new RuntimeException(e);
+      } catch (MinioException | NoSuchAlgorithmException | InvalidKeyException e) {
+        throw new RuntimeException("Failed to delete file in MinIO", e);
+      } catch (IOException e) {
+        throw new InvalidInputException(e.getMessage());
       }
     }
   }
 
   @Override
-  public void deleteImage(String componentPath, Long id, String objectName) {
-    final String path = String.format("%s/%d/%s/%s", componentPath, id, BASE_IMAGE_PATH, objectName);
-    if (isObjectExist(path)) {
+  public void deleteImage(String absolutePath) {
+    if (isObjectExist(absolutePath)) {
       try {
         minio.removeObject(RemoveObjectArgs.builder()
                 .bucket(bucket)
-                .object(path)
+                .object(absolutePath)
                 .build());
       } catch (MinioException | IOException | NoSuchAlgorithmException | InvalidKeyException e) {
         throw new RuntimeException(e);

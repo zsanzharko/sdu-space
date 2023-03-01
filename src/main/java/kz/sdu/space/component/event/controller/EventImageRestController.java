@@ -3,6 +3,7 @@ package kz.sdu.space.component.event.controller;
 import kz.sdu.space.component.event.EventComponent;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,10 +33,19 @@ public class EventImageRestController {
     return eventComponent.getImage(eventId, uuid);
   }
 
-  @PostMapping("/{eventId}")
+  @PostMapping(value = "/{eventId}",
+          consumes = "multipart/form-data"
+  )
   public ResponseEntity<?> uploadImage(@PathVariable Long eventId,
                                        @RequestParam("file") MultipartFile file) {
     eventComponent.uploadImage(file, eventId);
+    return ResponseEntity.ok().build();
+  }
+
+  @DeleteMapping(value = "/{eventId}/{fileName}")
+  public ResponseEntity<?> deleteImage(@PathVariable Long eventId,
+                                       @PathVariable String fileName) {
+    eventComponent.deleteImage(eventId, fileName);
     return ResponseEntity.ok().build();
   }
 }

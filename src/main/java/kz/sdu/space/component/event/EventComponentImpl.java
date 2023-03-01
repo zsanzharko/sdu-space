@@ -6,8 +6,10 @@ import kz.sdu.space.component.minio.MinioImageStorageServiceImpl;
 import kz.sdu.space.component.service.ImageStorageService;
 import kz.sdu.space.exception.IdNotFoundException;
 import kz.sdu.space.exception.InvalidInputException;
+import kz.sdu.space.exception.storage.StorageItemNotFoundException;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -77,11 +79,8 @@ public class EventComponentImpl implements EventComponent {
       String imageName = generateAbsolutePath(eventId, fileName);
       String path = String.format("events/%d/images/%s", eventId, imageName);
       if (getImage(eventId, path) == null) {
-        storageService.uploadImage(
-                file.getInputStream(),
-                path,
-                file.getContentType()
-        );
+        storageService.uploadImage(file.getInputStream(), path,
+                file.getContentType());
         event.addImageId(fileName);
         eventRepository.save(event);
       }
@@ -92,7 +91,9 @@ public class EventComponentImpl implements EventComponent {
     // process removing don't use images
     for (String imageId : event.getImageIdList()) {
       if (comingImageIds.contains(imageId)) {
-        storageService.deleteImage(BASE_EVENT_PATH, eventId, imageId);
+        final String path = String.format("%s/%d/%s/%s",
+                BASE_EVENT_PATH, eventId, storageService.getBasePath(), imageId);
+        storageService.deleteImage(path);
       }
     }
   }
@@ -105,18 +106,13 @@ public class EventComponentImpl implements EventComponent {
     }
   }
 
-  private void validId(EventDto eventDto) throws InvalidInputException {
-    if (eventDto.getId() == null || eventRepository.findById(eventDto.getId()).isEmpty()) {
-      throw new InvalidInputException("Incorrect date. Enter the id");
-    }
-  }
-
   @Override
   public void delete(@NonNull Long id) {
     eventRepository.deleteById(id);
   }
 
   @Override
+  @Transactional
   public void uploadImage(MultipartFile file, Long eventId) {
     Optional<Event> optionalEvent = eventRepository.findById(eventId);
     if (optionalEvent.isEmpty()) {
@@ -127,9 +123,10 @@ public class EventComponentImpl implements EventComponent {
       try {
         final String fileName = generateFileName(file.getOriginalFilename());
         final String path = generateAbsolutePath(eventId, fileName);
-        storageService.uploadImage(file.getInputStream(), path, file.getContentType());
         event.addImageId(fileName);
         eventRepository.save(event);
+
+        storageService.uploadImage(file.getInputStream(), path, file.getContentType());
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -140,6 +137,28 @@ public class EventComponentImpl implements EventComponent {
   public byte[] getImage(Long eventId, String originalFilename) throws InvalidInputException {
     final String path = generateAbsolutePath(eventId, originalFilename);
     return storageService.getImage(path);
+  }
+
+  @Override
+  @Transactional
+  public void deleteImage(Long eventId, String fileName) {
+    final String path = String.format("%s/%d/%s/%s",
+            BASE_EVENT_PATH, eventId, storageService.getBasePath(), fileName);
+    Event event = eventRepository.findById(eventId)
+            .orElseThrow(() -> new IdNotFoundException("Event don't found"));
+    if (!event.getImageIdList().contains(fileName)) {
+      throw new StorageItemNotFoundException();
+    }else {
+      event.removeImageId(fileName);
+    }
+    eventRepository.save(event);
+    storageService.deleteImage(path);
+  }
+
+  private void validId(EventDto eventDto) throws InvalidInputException {
+    if (eventDto.getId() == null || eventRepository.findById(eventDto.getId()).isEmpty()) {
+      throw new InvalidInputException("Incorrect date. Enter the id");
+    }
   }
 
   private String generateFileName(String originalFilename) {
