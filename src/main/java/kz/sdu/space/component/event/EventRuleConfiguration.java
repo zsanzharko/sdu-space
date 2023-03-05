@@ -11,4 +11,7 @@ public class EventRuleConfiguration {
   private Integer maxTitleLength;
   @Value("${app.component.event.max_description_length}")
   private Integer maxDescriptionLength;
+
+  @Value("1")
+  private Integer maxMarkdownSize;
 }

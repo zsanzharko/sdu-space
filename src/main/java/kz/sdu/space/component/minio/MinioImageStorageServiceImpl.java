@@ -19,6 +19,8 @@ import kz.sdu.space.component.service.storage.ImageStorageService;
 import kz.sdu.space.component.service.storage.MarkDownStorageService;
 import kz.sdu.space.exception.IdNotFoundException;
 import kz.sdu.space.exception.InvalidInputException;
+import kz.sdu.space.exception.storage.StorageException;
+import kz.sdu.space.exception.storage.StorageItemNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -108,7 +110,7 @@ public class MinioImageStorageServiceImpl implements ImageStorageService, MarkDo
   @Override
   public void deleteAllImages(String componentPath, Long id) {
     final String path = String.format("%s/%d/%s", componentPath, id, BASE_IMAGE_PATH);
-    if (isObjectExist(path)) {
+    if (fileIsExist(path)) {
       try {
         minio.removeObject(RemoveObjectArgs.builder()
                 .bucket(bucket)
@@ -124,7 +126,7 @@ public class MinioImageStorageServiceImpl implements ImageStorageService, MarkDo
 
   @Override
   public void deleteImage(String absolutePath) {
-    if (isObjectExist(absolutePath)) {
+    if (fileIsExist(absolutePath)) {
       try {
         minio.removeObject(RemoveObjectArgs.builder()
                 .bucket(bucket)
@@ -146,20 +148,6 @@ public class MinioImageStorageServiceImpl implements ImageStorageService, MarkDo
     //TODO match end dot with format
     String regex = String.format("^.*/\\d+/%s/.*$", getImageBasePath());
     return !path.matches(regex);
-  }
-
-  private boolean isObjectExist(final String path) {
-    try {
-      minio.statObject(StatObjectArgs.builder()
-              .bucket(bucket)
-              .object(path).build());
-      return true;
-    } catch (ErrorResponseException e) {
-      e.printStackTrace();
-      return false;
-    } catch (Exception e) {
-      throw new RuntimeException(e.getMessage());
-    }
   }
 
   private static void insertBytesToStream(InputStream stream, ByteArrayOutputStream output) throws IOException {
@@ -218,14 +206,14 @@ public class MinioImageStorageServiceImpl implements ImageStorageService, MarkDo
 
   @Override
   public void deleteMarkdown(String absolutePath) {
-    if (isObjectExist(absolutePath)) {
+    if (fileIsExist(absolutePath)) {
       try {
         minio.removeObject(RemoveObjectArgs.builder()
                 .bucket(bucket)
                 .object(absolutePath)
                 .build());
       } catch (MinioException | IOException | NoSuchAlgorithmException | InvalidKeyException e) {
-        throw new RuntimeException(e);
+        throw new StorageException(e.getMessage());
       }
     }
   }
@@ -281,5 +269,19 @@ public class MinioImageStorageServiceImpl implements ImageStorageService, MarkDo
     String regexFile = String.format("^.*/\\d+/%s/.*$", getMarkdownBasePath());
     String regexFolder = String.format("^.*/\\d+/%s$", getMarkdownBasePath());
     return !(path.matches(regexFile) || path.matches(regexFolder));
+  }
+
+  @Override
+  public boolean fileIsExist(String path) {
+    try {
+      minio.statObject(StatObjectArgs.builder()
+              .bucket(bucket)
+              .object(path).build());
+      return true;
+    } catch (ErrorResponseException e) {
+      throw new StorageItemNotFoundException(e.errorResponse().message());
+    } catch (Exception e) {
+      throw new StorageException(e.getMessage());
+    }
   }
 }

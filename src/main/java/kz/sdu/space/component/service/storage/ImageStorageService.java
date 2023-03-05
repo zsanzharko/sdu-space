@@ -4,7 +4,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
 
-public interface ImageStorageService {
+public interface ImageStorageService extends StorageService {
   void uploadImage(InputStream inputStream, String objectName, String contentType);
 
   void updateImage(MultipartFile multipartFile, String path);
@@ -18,7 +18,8 @@ public interface ImageStorageService {
   String getImageBasePath();
 
   String getImageAbsolutePath(String basePath, Long id, String fileName);
-  String getImageAbsolutePath(String basePath, Long id);
 
   boolean invalidateImagePath(String path);
+
+  String getImageAbsolutePath(String baseEventPath, Long id);
 }

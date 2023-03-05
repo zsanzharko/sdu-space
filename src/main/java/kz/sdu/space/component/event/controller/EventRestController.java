@@ -4,6 +4,7 @@ import kz.sdu.space.component.event.EventComponent;
 import kz.sdu.space.component.event.dto.EventDto;
 import kz.sdu.space.component.event.dto.EventForm;
 import kz.sdu.space.restcontrolleradvice.responseentity.BasicResponseEntity;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -11,21 +12,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
 @RestController
 @RequestMapping(value = "events")
+@RequiredArgsConstructor
 public class EventRestController {
-
   private final EventComponent eventComponent;
-
-  public EventRestController(EventComponent eventComponent) {
-    this.eventComponent = eventComponent;
-  }
 
   @GetMapping
   public BasicResponseEntity<List<EventDto>> showAllEvents() {
@@ -37,17 +32,9 @@ public class EventRestController {
     return new BasicResponseEntity<>(eventComponent.read(id));
   }
 
-  @PostMapping(value = "/event", consumes = {"multipart/form-data"})
-  public BasicResponseEntity<EventDto> create(@RequestBody EventForm eventForm,
-                                              @RequestParam(value = "full_content",
-                                                      required = false) MultipartFile markdownFile) {
-    EventDto eventDto;
-    if (markdownFile == null || markdownFile.isEmpty()) {
-      eventDto = eventComponent.create(eventForm);
-    } else {
-      eventDto = eventComponent.create(eventForm, markdownFile);
-    }
-
+  @PostMapping(value = "/event", consumes = "application/json")
+  public BasicResponseEntity<EventDto> create(@RequestBody EventForm eventForm) {
+    final EventDto eventDto = eventComponent.create(eventForm);
     return new BasicResponseEntity<>(eventDto);
   }
 

@@ -7,6 +7,7 @@ import kz.sdu.space.component.service.storage.ImageStorageService;
 import kz.sdu.space.component.service.storage.MarkDownStorageService;
 import kz.sdu.space.exception.IdNotFoundException;
 import kz.sdu.space.exception.InvalidInputException;
+import kz.sdu.space.exception.storage.StorageFileIsExistException;
 import kz.sdu.space.exception.storage.StorageItemNotFoundException;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
@@ -48,26 +49,30 @@ public class EventComponentImpl implements EventComponent {
 
   @Override
   @Transactional
-  public EventDto create(EventForm eventForm, MultipartFile markdownFile) {
-    validEventTitle(eventForm.getTitle());
-    validDateTime(eventForm.getDateEvent());
+  public void uploadMarkdownFile(Long eventId, MultipartFile markdownFile) {
+    Event event = eventRepository.findById(eventId)
+            .orElseThrow(() -> new IdNotFoundException("Event with id not found"));
     validateMarkDownFile(markdownFile);
 
-    EventDto eventDto = eventForm.getDataTransfer();
-    Event event = eventRepository.save(convertDto(eventDto));
-
     try {
-      final String markdownFileName = generateFileName(markdownFile.getOriginalFilename());
+      final String fileName = generateFileName(markdownFile.getOriginalFilename());
+      final String path = markDownStorageService
+              .getMarkdownAbsolutePath(BASE_EVENT_PATH, eventId, fileName);
+
+      if (event.getContentUUID() != null && !event.getContentUUID().isEmpty()
+              && markDownStorageService.fileIsExist(path)) {
+        throw new StorageFileIsExistException("File is exist in storage");
+      }
+
       markDownStorageService.uploadMarkdown(
               markdownFile.getInputStream(),
-              markdownFileName,
+              path,
               markdownFile.getContentType()
       );
-      event.setContentUUID(markdownFileName);
+      event.setContentUUID(fileName);
     } catch (IOException e) {
       throw new InvalidInputException("Can't upload markdown file.");
     }
-    return convertEntity(event);
   }
 
   private void validateMarkDownFile(MultipartFile markdownFile) {
@@ -190,6 +195,22 @@ public class EventComponentImpl implements EventComponent {
     }
     eventRepository.save(event);
     imageStorageService.deleteImage(path);
+  }
+
+  @Override
+  @Transactional
+  public void deleteMarkdown(Long eventId, String fileName) {
+    Event event = eventRepository.findById(eventId)
+            .orElseThrow(() -> new IdNotFoundException("Event with id not found"));
+    event.setContentUUID(null);
+    final String path = markDownStorageService.getMarkdownAbsolutePath(BASE_EVENT_PATH, eventId, fileName);
+    markDownStorageService.deleteMarkdown(path);
+  }
+
+  @Override
+  public byte[] getMarkdown(Long eventId, String markdownUUID) {
+    final String path = imageStorageService.getImageAbsolutePath(BASE_EVENT_PATH, eventId, markdownUUID);
+    return imageStorageService.getImage(path);
   }
 
   private void validId(EventDto eventDto) throws InvalidInputException {

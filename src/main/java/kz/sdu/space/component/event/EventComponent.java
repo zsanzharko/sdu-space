@@ -12,7 +12,7 @@ import java.util.List;
 
 public interface EventComponent extends CrudServiceOperations<EventDto, EventForm>,
         Converter<EventDto, Event> {
-  EventDto create(EventForm eventForm, MultipartFile markdownFile);
+  void uploadMarkdownFile(Long eventId, MultipartFile markdownFile);
 
   //TODO need to think about image process
   void updateImages(Long eventId, List<MultipartFile> multipartFileList) throws InvalidInputException, IOException;
@@ -22,4 +22,8 @@ public interface EventComponent extends CrudServiceOperations<EventDto, EventFor
   byte[] getImage(Long eventId, String originalFilename) throws InvalidInputException;
 
   void deleteImage(Long eventId, String fileName);
+
+  void deleteMarkdown(Long eventId, String fileName);
+
+  byte[] getMarkdown(Long eventId, String markdownUUID);
 }
