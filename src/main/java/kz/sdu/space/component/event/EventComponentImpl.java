@@ -3,7 +3,8 @@ package kz.sdu.space.component.event;
 import kz.sdu.space.component.event.dto.EventDto;
 import kz.sdu.space.component.event.dto.EventForm;
 import kz.sdu.space.component.minio.MinioImageStorageServiceImpl;
-import kz.sdu.space.component.service.ImageStorageService;
+import kz.sdu.space.component.service.storage.ImageStorageService;
+import kz.sdu.space.component.service.storage.MarkDownStorageService;
 import kz.sdu.space.exception.IdNotFoundException;
 import kz.sdu.space.exception.InvalidInputException;
 import kz.sdu.space.exception.storage.StorageItemNotFoundException;
@@ -25,13 +26,15 @@ public class EventComponentImpl implements EventComponent {
   private static final String BASE_EVENT_PATH = "events";
   private final EventRepository eventRepository;
   private final EventRuleConfiguration ruleConfiguration;
-  private final ImageStorageService storageService;
+  private final ImageStorageService imageStorageService;
+  private final MarkDownStorageService markDownStorageService;
 
   public EventComponentImpl(EventRuleConfiguration ruleConfiguration, EventRepository eventRepository,
                             MinioImageStorageServiceImpl storageService) {
     this.eventRepository = eventRepository;
     this.ruleConfiguration = ruleConfiguration;
-    this.storageService = storageService;
+    this.imageStorageService = storageService;
+    this.markDownStorageService = storageService;
   }
 
   @Override
@@ -41,6 +44,36 @@ public class EventComponentImpl implements EventComponent {
 
     EventDto eventDto = eventForm.getDataTransfer();
     return convertEntity(eventRepository.save(convertDto(eventDto)));
+  }
+
+  @Override
+  @Transactional
+  public EventDto create(EventForm eventForm, MultipartFile markdownFile) {
+    validEventTitle(eventForm.getTitle());
+    validDateTime(eventForm.getDateEvent());
+    validateMarkDownFile(markdownFile);
+
+    EventDto eventDto = eventForm.getDataTransfer();
+    Event event = eventRepository.save(convertDto(eventDto));
+
+    try {
+      final String markdownFileName = generateFileName(markdownFile.getOriginalFilename());
+      markDownStorageService.uploadMarkdown(
+              markdownFile.getInputStream(),
+              markdownFileName,
+              markdownFile.getContentType()
+      );
+      event.setContentUUID(markdownFileName);
+    } catch (IOException e) {
+      throw new InvalidInputException("Can't upload markdown file.");
+    }
+    return convertEntity(event);
+  }
+
+  private void validateMarkDownFile(MultipartFile markdownFile) {
+    if (markdownFile == null || markdownFile.isEmpty()) {
+      throw new InvalidInputException("Markdown file can't read or  does not exist");
+    }
   }
 
   @Override
@@ -76,10 +109,9 @@ public class EventComponentImpl implements EventComponent {
 
     for (MultipartFile file : multipartFileList) {
       final String fileName = generateFileName(file.getOriginalFilename());
-      String imageName = generateAbsolutePath(eventId, fileName);
-      String path = String.format("events/%d/images/%s", eventId, imageName);
+      String path = imageStorageService.getImageAbsolutePath(BASE_EVENT_PATH, eventId, fileName);
       if (getImage(eventId, path) == null) {
-        storageService.uploadImage(file.getInputStream(), path,
+        imageStorageService.uploadImage(file.getInputStream(), path,
                 file.getContentType());
         event.addImageId(fileName);
         eventRepository.save(event);
@@ -91,9 +123,8 @@ public class EventComponentImpl implements EventComponent {
     // process removing don't use images
     for (String imageId : event.getImageIdList()) {
       if (comingImageIds.contains(imageId)) {
-        final String path = String.format("%s/%d/%s/%s",
-                BASE_EVENT_PATH, eventId, storageService.getBasePath(), imageId);
-        storageService.deleteImage(path);
+        final String path = imageStorageService.getImageAbsolutePath(BASE_EVENT_PATH, eventId, imageId);
+        imageStorageService.deleteImage(path);
       }
     }
   }
@@ -108,7 +139,13 @@ public class EventComponentImpl implements EventComponent {
 
   @Override
   public void delete(@NonNull Long id) {
-    eventRepository.deleteById(id);
+    if (eventRepository.existsById(id)) {
+      final String imageAbsolutePath = imageStorageService.getImageAbsolutePath(BASE_EVENT_PATH, id);
+      final String markDownAbsolutePath = markDownStorageService.getMarkdownAbsolutePath(BASE_EVENT_PATH, id);
+      eventRepository.deleteById(id);
+      imageStorageService.deleteAllImages(imageAbsolutePath, id);
+      markDownStorageService.deleteMarkdown(markDownAbsolutePath);
+    }
   }
 
   @Override
@@ -122,11 +159,11 @@ public class EventComponentImpl implements EventComponent {
       validImageSize(event.getImageIdList().size());
       try {
         final String fileName = generateFileName(file.getOriginalFilename());
-        final String path = generateAbsolutePath(eventId, fileName);
+        final String path = imageStorageService.getImageAbsolutePath(BASE_EVENT_PATH, eventId, fileName);
         event.addImageId(fileName);
         eventRepository.save(event);
 
-        storageService.uploadImage(file.getInputStream(), path, file.getContentType());
+        imageStorageService.uploadImage(file.getInputStream(), path, file.getContentType());
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -135,15 +172,15 @@ public class EventComponentImpl implements EventComponent {
 
   @Override
   public byte[] getImage(Long eventId, String originalFilename) throws InvalidInputException {
-    final String path = generateAbsolutePath(eventId, originalFilename);
-    return storageService.getImage(path);
+    final String path = imageStorageService.getImageAbsolutePath(BASE_EVENT_PATH, eventId, originalFilename);
+    return imageStorageService.getImage(path);
   }
 
   @Override
   @Transactional
   public void deleteImage(Long eventId, String fileName) {
     final String path = String.format("%s/%d/%s/%s",
-            BASE_EVENT_PATH, eventId, storageService.getBasePath(), fileName);
+            BASE_EVENT_PATH, eventId, imageStorageService.getImageBasePath(), fileName);
     Event event = eventRepository.findById(eventId)
             .orElseThrow(() -> new IdNotFoundException("Event don't found"));
     if (!event.getImageIdList().contains(fileName)) {
@@ -152,7 +189,7 @@ public class EventComponentImpl implements EventComponent {
       event.removeImageId(fileName);
     }
     eventRepository.save(event);
-    storageService.deleteImage(path);
+    imageStorageService.deleteImage(path);
   }
 
   private void validId(EventDto eventDto) throws InvalidInputException {
@@ -169,25 +206,6 @@ public class EventComponentImpl implements EventComponent {
     return UUID.randomUUID() + originalFilename.trim().substring(originalFilename.indexOf('.'));
   }
 
-  private String generateAbsolutePath(final Long id, String fileName) {
-    String absoluteFilePath = String.format("%s/%s/%s/%s",
-            BASE_EVENT_PATH, id,
-            storageService.getBasePath(),
-            fileName
-    );
-    if (invalidateImageName(absoluteFilePath)) {
-      throw new RuntimeException("Error with generating name for image");
-    }
-    return absoluteFilePath;
-  }
-
-  private boolean invalidateImageName(String absolutePath) {
-    //TODO match end dot with format
-    String regex = String.format("^%s/\\d+/%s/.*$",
-            BASE_EVENT_PATH, storageService.getBasePath());
-    return !absolutePath.matches(regex);
-  }
-
   @Override
   public EventDto convertEntity(@NonNull Event event) {
     return EventDto.builder()
@@ -196,6 +214,7 @@ public class EventComponentImpl implements EventComponent {
             .title(event.getTitle())
             .description(event.getDescription())
             .dateEvent(event.getDateEvent())
+            .contentUUID(event.getContentUUID())
             .build();
   }
 
@@ -207,6 +226,7 @@ public class EventComponentImpl implements EventComponent {
             .title(eventDto.getTitle())
             .description(eventDto.getDescription())
             .dateEvent(eventDto.getDateEvent())
+            .contentUUID(eventDto.getContentUUID())
             .build();
   }
 

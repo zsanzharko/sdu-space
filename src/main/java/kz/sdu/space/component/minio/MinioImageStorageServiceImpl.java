@@ -15,7 +15,8 @@ import io.minio.errors.MinioException;
 import io.minio.errors.ServerException;
 import io.minio.errors.XmlParserException;
 import jakarta.annotation.PostConstruct;
-import kz.sdu.space.component.service.ImageStorageService;
+import kz.sdu.space.component.service.storage.ImageStorageService;
+import kz.sdu.space.component.service.storage.MarkDownStorageService;
 import kz.sdu.space.exception.IdNotFoundException;
 import kz.sdu.space.exception.InvalidInputException;
 import lombok.extern.slf4j.Slf4j;
@@ -32,7 +33,8 @@ import java.security.NoSuchAlgorithmException;
 
 @Service
 @Slf4j
-public class MinioImageStorageServiceImpl implements ImageStorageService {
+public class MinioImageStorageServiceImpl implements ImageStorageService, MarkDownStorageService {
+  private static final String BASE_MARKDOWN_PATH = "markdownFiles";
   private static final String BASE_IMAGE_PATH = "images";
   private final MinioClient minio;
   private final String bucket;
@@ -68,7 +70,7 @@ public class MinioImageStorageServiceImpl implements ImageStorageService {
               .build();
       minio.putObject(args);
     } catch (MinioException | NoSuchAlgorithmException | InvalidKeyException e) {
-      throw new RuntimeException("Failed to upload file to MinIO", e);
+      throw new RuntimeException("Failed to upload image file to file storage", e);
     } catch (IOException e) {
       throw new InvalidInputException(e.getMessage());
     }
@@ -76,7 +78,7 @@ public class MinioImageStorageServiceImpl implements ImageStorageService {
 
   @Override
   public void updateImage(MultipartFile multipartFile, String path) {
-
+    //TODO realize method
   }
 
   @Override
@@ -104,7 +106,7 @@ public class MinioImageStorageServiceImpl implements ImageStorageService {
   }
 
   @Override
-  public void deleteAll(String componentPath, Long id) {
+  public void deleteAllImages(String componentPath, Long id) {
     final String path = String.format("%s/%d/%s", componentPath, id, BASE_IMAGE_PATH);
     if (isObjectExist(path)) {
       try {
@@ -135,8 +137,15 @@ public class MinioImageStorageServiceImpl implements ImageStorageService {
   }
 
   @Override
-  public String getBasePath() {
+  public String getImageBasePath() {
     return BASE_IMAGE_PATH;
+  }
+
+  @Override
+  public boolean invalidateImagePath(String path) {
+    //TODO match end dot with format
+    String regex = String.format("^.*/\\d+/%s/.*$", getImageBasePath());
+    return !path.matches(regex);
   }
 
   private boolean isObjectExist(final String path) {
@@ -159,5 +168,118 @@ public class MinioImageStorageServiceImpl implements ImageStorageService {
     while ((n = stream.read(buffer)) != -1) {
       output.write(buffer, 0, n);
     }
+  }
+
+  @Override
+  public void uploadMarkdown(InputStream inputStream, String objectName, String contentType) {
+    try (inputStream) {
+      PutObjectArgs args = PutObjectArgs.builder()
+              .bucket(bucket)
+              .object(objectName)
+              .contentType(contentType)
+              .stream(inputStream, -1, maxObjectSize)
+              .build();
+      minio.putObject(args);
+    } catch (MinioException | NoSuchAlgorithmException | InvalidKeyException e) {
+      throw new RuntimeException("Failed to upload markdown file to MinIO", e);
+    } catch (IOException e) {
+      throw new InvalidInputException(e.getMessage());
+    }
+  }
+
+  @Override
+  public void updateMarkdown(MultipartFile multipartFile, String path) {
+    //TODO realize method
+  }
+
+  @Override
+  public byte[] getMarkdown(String objectName) {
+    try {
+      GetObjectArgs args = GetObjectArgs.builder()
+              .bucket(bucket)
+              .object(objectName)
+              .build();
+      InputStream stream = minio.getObject(args);
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      insertBytesToStream(stream, output);
+      return output.toByteArray();
+    } catch (IOException | InvalidKeyException | NoSuchAlgorithmException | InsufficientDataException |
+             InternalException | InvalidResponseException | ServerException | XmlParserException e) {
+      throw new RuntimeException(e);
+    } catch (ErrorResponseException e) {
+      try (var response = e.response()) {
+        if (response.code() == HttpStatus.NOT_FOUND.value()) {
+          throw new IdNotFoundException("Markdown content not found");
+        }
+      }
+    }
+    throw new RuntimeException("Have problem with getting markdown file");
+  }
+
+  @Override
+  public void deleteMarkdown(String absolutePath) {
+    if (isObjectExist(absolutePath)) {
+      try {
+        minio.removeObject(RemoveObjectArgs.builder()
+                .bucket(bucket)
+                .object(absolutePath)
+                .build());
+      } catch (MinioException | IOException | NoSuchAlgorithmException | InvalidKeyException e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+
+  @Override
+  public String getMarkdownBasePath() {
+    return BASE_MARKDOWN_PATH;
+  }
+
+  @Override
+  public String getMarkdownAbsolutePath(String basePath, Long id, String fileName) {
+    String absoluteFilePath = String.format("%s/%s/%s/%s",
+            basePath, id, getMarkdownBasePath(), fileName);
+    if (invalidateMarkdownPath(absoluteFilePath)) {
+      throw new RuntimeException("Error with generating name for image");
+    }
+    return absoluteFilePath;
+  }
+
+  @Override
+  public String getMarkdownAbsolutePath(String basePath, Long id) {
+    String absoluteFilePath = String.format("%s/%s/%s",
+            basePath, id, getMarkdownBasePath());
+    if (invalidateMarkdownPath(absoluteFilePath)) {
+      throw new RuntimeException("Error with generating name for image");
+    }
+    return absoluteFilePath;
+  }
+
+  @Override
+  public String getImageAbsolutePath(String basePath, Long id, String fileName) {
+    String absoluteFilePath = String.format("%s/%s/%s/%s",
+            basePath, id, getImageBasePath(), fileName);
+    if (invalidateImagePath(absoluteFilePath)) {
+      throw new RuntimeException("Error with generating name for image");
+    }
+    return absoluteFilePath;
+  }
+
+  @Override
+  public String getImageAbsolutePath(String basePath, Long id) {
+    String absoluteFilePath = String.format("%s/%s/%s",
+            basePath, id, getImageBasePath());
+    if (invalidateImagePath(absoluteFilePath)) {
+      throw new RuntimeException("Error with generating name for image");
+    }
+    return absoluteFilePath;
+  }
+
+  @Override
+  public boolean invalidateMarkdownPath(String path) {
+    //TODO match end dot with format
+    String regexFile = String.format("^.*/\\d+/%s/.*$", getMarkdownBasePath());
+    String regexFolder = String.format("^.*/\\d+/%s$", getMarkdownBasePath());
+    return !(path.matches(regexFile) || path.matches(regexFolder));
   }
 }

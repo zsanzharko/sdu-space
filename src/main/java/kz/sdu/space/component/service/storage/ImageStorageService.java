@@ -1,4 +1,4 @@
-package kz.sdu.space.component.service;
+package kz.sdu.space.component.service.storage;
 
 import org.springframework.web.multipart.MultipartFile;
 
@@ -11,9 +11,14 @@ public interface ImageStorageService {
 
   byte[] getImage(String objectName);
 
-  void deleteAll(String path, Long id);
+  void deleteAllImages(String path, Long id);
 
   void deleteImage(String absolutePath);
 
-  String getBasePath();
+  String getImageBasePath();
+
+  String getImageAbsolutePath(String basePath, Long id, String fileName);
+  String getImageAbsolutePath(String basePath, Long id);
+
+  boolean invalidateImagePath(String path);
 }

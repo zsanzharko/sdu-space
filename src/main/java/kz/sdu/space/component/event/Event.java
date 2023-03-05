@@ -26,7 +26,8 @@ public class Event {
   }
 
   @Builder
-  public Event(Long id, List<String> imageIdList, String title, String description, Timestamp dateEvent) {
+  public Event(Long id, List<String> imageIdList, String title,
+               String description, Timestamp dateEvent, String contentUUID) {
     this.id = id;
     this.imageIdList = imageIdList;
     this.title = title;
@@ -47,6 +48,9 @@ public class Event {
   private String title;
   @Column(name = "description")
   private String description;
+
+  @Column(name= "content_uuid")
+  private String contentUUID;
 
   @Column(name = "event_date")
   @Temporal(TemporalType.TIMESTAMP)

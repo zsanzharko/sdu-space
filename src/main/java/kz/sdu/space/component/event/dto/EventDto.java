@@ -15,4 +15,5 @@ public class EventDto implements DataTransfer {
   private String title;
   private String description;
   private Timestamp dateEvent;
+  private String contentUUID;
 }

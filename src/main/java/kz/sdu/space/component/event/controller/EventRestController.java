@@ -11,7 +11,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -35,9 +37,18 @@ public class EventRestController {
     return new BasicResponseEntity<>(eventComponent.read(id));
   }
 
-  @PostMapping("/event")
-  public BasicResponseEntity<EventDto> create(@RequestBody EventForm eventForm) {
-    return new BasicResponseEntity<>(eventComponent.create(eventForm));
+  @PostMapping(value = "/event", consumes = {"multipart/form-data"})
+  public BasicResponseEntity<EventDto> create(@RequestBody EventForm eventForm,
+                                              @RequestParam(value = "full_content",
+                                                      required = false) MultipartFile markdownFile) {
+    EventDto eventDto;
+    if (markdownFile == null || markdownFile.isEmpty()) {
+      eventDto = eventComponent.create(eventForm);
+    } else {
+      eventDto = eventComponent.create(eventForm, markdownFile);
+    }
+
+    return new BasicResponseEntity<>(eventDto);
   }
 
   @PutMapping("/event")

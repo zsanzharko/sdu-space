@@ -12,6 +12,8 @@ import java.util.List;
 
 public interface EventComponent extends CrudServiceOperations<EventDto, EventForm>,
         Converter<EventDto, Event> {
+  EventDto create(EventForm eventForm, MultipartFile markdownFile);
+
   //TODO need to think about image process
   void updateImages(Long eventId, List<MultipartFile> multipartFileList) throws InvalidInputException, IOException;
 
